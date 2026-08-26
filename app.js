@@ -5,7 +5,7 @@ const els = {
   dialog: document.querySelector('#import-dialog'), openImport: document.querySelector('#open-import'), file: document.querySelector('#file-input'),
   mappingPanel: document.querySelector('#mapping-panel'), mappingFields: document.querySelector('#mapping-fields'), importButton: document.querySelector('#import-data'),
   importMessage: document.querySelector('#import-message'), rules: document.querySelector('#category-rules'), exportButton: document.querySelector('#export-data'),
-  scanButton: document.querySelector('#scan-barcode'), scanDialog: document.querySelector('#scanner-dialog'), closeScanner: document.querySelector('#close-scanner'), scannerMessage: document.querySelector('#scanner-message'),
+  scanButton: document.querySelector('#scan-barcode'), scanDialog: document.querySelector('#scanner-dialog'), closeScanner: document.querySelector('#close-scanner'), scannerMessage: document.querySelector('#scanner-message'), torch: document.querySelector('#toggle-torch'),
 };
 const DEFAULT_CATEGORY_RULES = `โค้ก,เป๊ปซี่,น้ำดื่ม,น้ำอัดลม,ชา,กาแฟ,นม,โซดา,เบียร์,โออิชิ,อิชิตัน = เครื่องดื่ม
 เลย์,ขนม,มันฝรั่ง,คุกกี้,เยลลี่,ลูกอม,หมากฝรั่ง,เวเฟอร์,ช็อกโกแลต = ขนม
@@ -22,7 +22,7 @@ const fields = [
   ['category', 'หมวดจาก POS (ถ้ามี)', ['category', 'หมวดหมู่', 'department', 'group']],
 ];
 let products = [], activeCategory = 'ทั้งหมด', workbookRows = [], headers = [];
-let scanner = null;
+let scanner = null, torchOn = false;
 const normalize = value => String(value ?? '').trim().toLocaleLowerCase('th');
 const keyify = value => normalize(value).replace(/[\s\-_/().]/g, '');
 const barcodeKey = value => String(value ?? '').replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
@@ -96,6 +96,8 @@ async function stopScanner() {
   scanner = null;
   try { await active.stop(); } catch { /* Scanner already stopped. */ }
   try { active.clear(); } catch { /* Scanner already cleared. */ }
+  torchOn = false;
+  els.torch.hidden = true;
 }
 async function startScanner() {
   if (!window.Html5Qrcode || !navigator.mediaDevices?.getUserMedia) {
@@ -110,7 +112,9 @@ async function startScanner() {
     const cameras = await Html5Qrcode.getCameras();
     const rearCamera = cameras.find(camera => /back|rear|environment/i.test(camera.label)) || cameras[cameras.length - 1];
     const cameraSource = rearCamera ? rearCamera.id : { facingMode: 'environment' };
-    await scanner.start(cameraSource, { fps: 10, qrbox: { width: 280, height: 160 }, disableFlip: true }, async decodedText => {
+    const formats = window.Html5QrcodeSupportedFormats;
+    const retailFormats = formats ? [formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E, formats.CODE_128].filter(Boolean) : undefined;
+    await scanner.start(cameraSource, { fps: 15, qrbox: { width: 300, height: 145 }, disableFlip: true, formatsToSupport: retailFormats }, async decodedText => {
       els.search.value = decodedText;
       els.clear.hidden = false;
       render();
@@ -118,6 +122,11 @@ async function startScanner() {
       await stopScanner();
       els.scanDialog.close();
     });
+    const video = document.querySelector('#barcode-reader video');
+    if (video) { video.setAttribute('playsinline', 'true'); video.setAttribute('webkit-playsinline', 'true'); }
+    const capabilities = scanner.getRunningTrackCapabilities?.() || {};
+    els.torch.hidden = !capabilities.torch;
+    els.scannerMessage.textContent = 'วางเส้นบาร์โค้ดไว้ในกรอบ ระบบจะค้นหาให้อัตโนมัติ';
   } catch (error) {
     const detail = [error?.name, error?.message].filter(Boolean).join(': ');
     els.scannerMessage.textContent = `เปิดกล้องไม่ได้${detail ? ` (${detail})` : ''}`;
@@ -171,6 +180,14 @@ els.exportButton.onclick = () => { const blob = new Blob([JSON.stringify({ updat
 els.scanButton.onclick = startScanner;
 els.closeScanner.onclick = async () => { await stopScanner(); els.scanDialog.close(); };
 els.scanDialog.addEventListener('cancel', async event => { event.preventDefault(); await stopScanner(); els.scanDialog.close(); });
+els.torch.onclick = async () => {
+  if (!scanner?.applyVideoConstraints) return;
+  try {
+    torchOn = !torchOn;
+    await scanner.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
+    els.torch.textContent = torchOn ? '🔦 ปิดไฟฉาย' : '🔦 เปิดไฟฉาย';
+  } catch { els.scannerMessage.textContent = 'เครื่องนี้เปิดไฟฉายผ่านเว็บไม่ได้'; }
+};
 els.rules.value = DEFAULT_CATEGORY_RULES;
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 loadData();

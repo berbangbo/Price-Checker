@@ -65,6 +65,7 @@
     <dialog id="scanner-dialog">
       <div class="dialog-heading"><div><p class="eyebrow">สแกนบาร์โค้ด</p><h2>หันกล้องไปที่บาร์โค้ด</h2></div><button class="icon-button" id="close-scanner" type="button" aria-label="ปิด">×</button></div>
       <div id="barcode-reader" class="barcode-reader"></div>
+      <div class="scanner-controls"><button id="toggle-torch" class="secondary-button" type="button" hidden>🔦 เปิดไฟฉาย</button></div>
       <p id="scanner-message" class="hint">กำลังเปิดกล้อง…</p>
     </dialog>
 
@@ -73,6 +74,6 @@
     </template>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" defer></script>
-    <script src="app.js?v=9"></script>
+    <script src="app.js?v=10"></script>
   </body>
 </html>
