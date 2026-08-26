@@ -7,6 +7,14 @@ const els = {
   importMessage: document.querySelector('#import-message'), rules: document.querySelector('#category-rules'), exportButton: document.querySelector('#export-data'),
   scanButton: document.querySelector('#scan-barcode'), scanDialog: document.querySelector('#scanner-dialog'), closeScanner: document.querySelector('#close-scanner'), scannerMessage: document.querySelector('#scanner-message'), torch: document.querySelector('#toggle-torch'), capturePhoto: document.querySelector('#capture-photo'), photoInput: document.querySelector('#photo-input'),
 };
+const adminEls = {
+  button: document.querySelector('#admin-button'), dialog: document.querySelector('#admin-dialog'), close: document.querySelector('#close-admin'),
+  loginForm: document.querySelector('#admin-login-form'), email: document.querySelector('#admin-email'), password: document.querySelector('#admin-password'),
+  signedIn: document.querySelector('#admin-signed-in'), user: document.querySelector('#admin-user'), logout: document.querySelector('#admin-logout'), message: document.querySelector('#admin-message'),
+  editor: document.querySelector('#price-editor-dialog'), closeEditor: document.querySelector('#close-price-editor'), editorForm: document.querySelector('#price-editor-form'),
+  productName: document.querySelector('#edit-product-name'), productDetail: document.querySelector('#edit-product-detail'), unit: document.querySelector('#edit-unit'),
+  price: document.querySelector('#edit-price'), reason: document.querySelector('#edit-reason'), expires: document.querySelector('#edit-expires'), reset: document.querySelector('#reset-price'), editorMessage: document.querySelector('#price-editor-message')
+};
 const DEFAULT_CATEGORY_RULES = `โค้ก,เป๊ปซี่,น้ำดื่ม,น้ำอัดลม,ชา,กาแฟ,นม,โซดา,เบียร์,โออิชิ,อิชิตัน = เครื่องดื่ม
 เลย์,ขนม,มันฝรั่ง,คุกกี้,เยลลี่,ลูกอม,หมากฝรั่ง,เวเฟอร์,ช็อกโกแลต = ขนม
 มาม่า,ไวไว,บะหมี่,วุ้นเส้น,ปลากระป๋อง,ซอส,น้ำปลา = อาหารแห้ง
@@ -21,12 +29,40 @@ const fields = [
   ['barcode', 'บาร์โค้ด', ['barcode', 'บาร์โค้ด', 'ean']],
   ['category', 'หมวดจาก POS (ถ้ามี)', ['category', 'หมวดหมู่', 'department', 'group']],
 ];
-let products = [], activeCategory = 'ทั้งหมด', workbookRows = [], headers = [];
+let products = [], baseProducts = [], activeCategory = 'ทั้งหมด', workbookRows = [], headers = [];
 let scanner = null, torchOn = false;
+let adminSession = null, editingProduct = null, editingOffer = null;
+let priceOverrides = new Map();
 const normalize = value => String(value ?? '').trim().toLocaleLowerCase('th');
 const keyify = value => normalize(value).replace(/[\s\-_/().]/g, '');
 const barcodeKey = value => String(value ?? '').replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
 const money = value => new Intl.NumberFormat('th-TH', { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(value);
+const overrideKey = (product, offer) => `${product.barcode ? `barcode:${barcodeKey(product.barcode)}` : `sku:${product.sku}`}|unit:${normalize(offer.unit || '')}`;
+
+function applyOverrides(shouldRender = true) {
+  products = baseProducts.map(product => ({ ...product, offers: product.offers.map(offer => {
+    const override = priceOverrides.get(overrideKey(product, offer));
+    return override ? { ...offer, price: Number(override.price), isOverride: true, override } : { ...offer, isOverride: false };
+  }) }));
+  if (shouldRender) render();
+}
+async function refreshOverrides() {
+  if (!window.priceCheckerBackend) return;
+  try { const rows = await window.priceCheckerBackend.getOverrides(); priceOverrides = new Map(rows.map(row => [row.product_key, row])); applyOverrides(); }
+  catch (error) { console.warn('Could not load price overrides', error); }
+}
+function updateAdminUi() {
+  const signedIn = Boolean(adminSession);
+  adminEls.loginForm.hidden = signedIn; adminEls.signedIn.hidden = !signedIn;
+  adminEls.user.textContent = signedIn ? `เข้าสู่ระบบแล้ว: ${adminSession.user.email}` : '';
+  adminEls.button.textContent = signedIn ? '✏️' : '🔐'; render();
+}
+async function setupBackend() {
+  if (!window.priceCheckerBackend) return;
+  adminSession = await window.priceCheckerBackend.session(); updateAdminUi(); await refreshOverrides();
+  window.priceCheckerBackend.subscribe(refreshOverrides);
+  window.priceCheckerBackend.client.auth.onAuthStateChange((_event, session) => { adminSession = session; updateAdminUi(); });
+}
 
 function render() {
   const query = normalize(els.search.value);
@@ -49,6 +85,16 @@ function productCard(product) {
   node.querySelector('.product-meta').textContent = [product.sku, product.barcode].filter(Boolean).join(' · ');
   const list = node.querySelector('.price-list');
   product.offers.forEach(offer => { const line = document.createElement('div'); line.className = 'price-line'; line.innerHTML = `<span class="unit">${escapeHtml(offer.unit || 'หน่วย')}</span>฿${money(offer.price)}`; list.append(line); });
+  if (adminSession) {
+    const card = node.querySelector('.product-card');
+    card.classList.add('admin-editable');
+    list.querySelectorAll('.price-line').forEach((line, index) => {
+      const offer = product.offers[index];
+      if (offer.isOverride) line.classList.add('override-price');
+      line.onclick = event => { event.stopPropagation(); openPriceEditor(product, offer); };
+    });
+    card.onclick = () => openPriceEditor(product, product.offers[0]);
+  }
   return node;
 }
 function escapeHtml(value) { const span = document.createElement('span'); span.textContent = value; return span.innerHTML; }
@@ -65,8 +111,8 @@ function cleanProducts(records) {
     return { ...product, offers: product.offers.sort((a, b) => a.price - b.price), search: normalize(searchable), searchCompact: keyify(searchable) };
   });
 }
-function save() { localStorage.setItem('price-finder-products', JSON.stringify(products)); localStorage.setItem('price-finder-updated', new Date().toISOString()); }
-function setProducts(next, source) { products = next; const date = localStorage.getItem('price-finder-updated'); els.status.textContent = `${products.length.toLocaleString('th-TH')} สินค้า${date ? ` · อัปเดต ${new Date(date).toLocaleDateString('th-TH')}` : source ? ` · ${source}` : ''}`; render(); }
+function save() { localStorage.setItem('price-finder-products', JSON.stringify(baseProducts)); localStorage.setItem('price-finder-updated', new Date().toISOString()); }
+function setProducts(next, source) { baseProducts = next; applyOverrides(false); const date = localStorage.getItem('price-finder-updated'); els.status.textContent = `${products.length.toLocaleString('th-TH')} สินค้า${date ? ` · อัปเดต ${new Date(date).toLocaleDateString('th-TH')}` : source ? ` · ${source}` : ''}`; render(); }
 async function loadData() {
   try {
     const response = await fetch('products.json', { cache: 'no-store' });
@@ -164,13 +210,58 @@ async function importRows() {
   }
 }
 function saveImported(next) {
-  products = next;
+  baseProducts = next;
   let saved = true;
   try { save(); }
   catch { saved = false; }
-  setProducts(products, saved ? 'ข้อมูลใหม่' : 'ข้อมูลชั่วคราว');
+  setProducts(baseProducts, saved ? 'ข้อมูลใหม่' : 'ข้อมูลชั่วคราว');
   return saved;
 }
+function openPriceEditor(product, offer) {
+  if (!adminSession) return;
+  editingProduct = product; editingOffer = offer;
+  adminEls.productName.textContent = product.name || 'สินค้า';
+  adminEls.productDetail.textContent = [product.sku, product.barcode].filter(Boolean).join(' · ');
+  adminEls.unit.replaceChildren(...product.offers.map(item => {
+    const option = document.createElement('option'); option.value = overrideKey(product, item); option.textContent = item.unit || 'หน่วย';
+    option.selected = item === offer; return option;
+  }));
+  const existing = priceOverrides.get(overrideKey(product, offer));
+  adminEls.price.value = offer.price;
+  adminEls.reason.value = existing?.reason || '';
+  adminEls.expires.value = existing?.expires_at ? existing.expires_at.slice(0, 10) : '';
+  adminEls.editorMessage.textContent = '';
+  adminEls.editor.showModal();
+}
+function chosenOffer() { return editingProduct?.offers.find(offer => overrideKey(editingProduct, offer) === adminEls.unit.value); }
+adminEls.unit.onchange = () => {
+  editingOffer = chosenOffer(); const existing = priceOverrides.get(adminEls.unit.value);
+  adminEls.price.value = editingOffer?.price ?? ''; adminEls.reason.value = existing?.reason || ''; adminEls.expires.value = existing?.expires_at ? existing.expires_at.slice(0, 10) : '';
+};
+adminEls.button.onclick = () => { adminEls.message.textContent = ''; adminEls.dialog.showModal(); };
+adminEls.close.onclick = () => adminEls.dialog.close();
+adminEls.loginForm.onsubmit = async event => {
+  event.preventDefault(); if (!window.priceCheckerBackend) { adminEls.message.textContent = 'ยังเชื่อมฐานข้อมูลไม่สำเร็จ'; return; }
+  adminEls.message.textContent = 'กำลังเข้าสู่ระบบ…';
+  try { await window.priceCheckerBackend.signIn(adminEls.email.value.trim(), adminEls.password.value); adminEls.password.value = ''; adminEls.message.textContent = ''; adminEls.dialog.close(); }
+  catch (error) { adminEls.message.textContent = `เข้าสู่ระบบไม่ได้: ${error.message}`; }
+};
+adminEls.logout.onclick = async () => { await window.priceCheckerBackend?.signOut(); adminEls.dialog.close(); };
+adminEls.closeEditor.onclick = () => adminEls.editor.close();
+adminEls.editorForm.onsubmit = async event => {
+  event.preventDefault(); const offer = chosenOffer(); if (!offer || !editingProduct) return;
+  const price = Number(adminEls.price.value); if (!Number.isFinite(price) || price < 0) { adminEls.editorMessage.textContent = 'กรุณาใส่ราคาที่ถูกต้อง'; return; }
+  adminEls.editorMessage.textContent = 'กำลังบันทึก…';
+  try {
+    await window.priceCheckerBackend.saveOverride({ product_key: overrideKey(editingProduct, offer), sku: editingProduct.sku || null, barcode: editingProduct.barcode || null, unit: offer.unit || null, price, reason: adminEls.reason.value.trim() || null, expires_at: adminEls.expires.value ? `${adminEls.expires.value}T23:59:59+07:00` : null });
+    await refreshOverrides(); adminEls.editor.close();
+  } catch (error) { adminEls.editorMessage.textContent = `บันทึกไม่ได้: ${error.message}`; }
+};
+adminEls.reset.onclick = async () => {
+  if (!editingProduct || !window.confirm('ลบราคาแก้ไข แล้วกลับไปใช้ราคา POS?')) return;
+  try { await window.priceCheckerBackend.deleteOverride(adminEls.unit.value); await refreshOverrides(); adminEls.editor.close(); }
+  catch (error) { adminEls.editorMessage.textContent = `ลบไม่ได้: ${error.message}`; }
+};
 els.openImport.onclick = () => els.dialog.showModal();
 els.search.oninput = () => { els.clear.hidden = !els.search.value; render(); }; els.clear.onclick = () => { els.search.value = ''; els.clear.hidden = true; render(); };
 document.querySelector('#all-categories').onclick = () => { activeCategory = 'ทั้งหมด'; render(); };
@@ -180,7 +271,7 @@ els.file.onchange = async event => {
   catch (error) { els.importMessage.textContent = `อ่านไฟล์ไม่ได้: ${error.message}`; }
 };
 els.importButton.onclick = importRows;
-els.exportButton.onclick = () => { const blob = new Blob([JSON.stringify({ updatedAt: new Date().toISOString(), products }, null, 2)], { type: 'application/json' }); const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'products.json' }); link.click(); URL.revokeObjectURL(link.href); };
+els.exportButton.onclick = () => { const blob = new Blob([JSON.stringify({ updatedAt: new Date().toISOString(), products: baseProducts }, null, 2)], { type: 'application/json' }); const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'products.json' }); link.click(); URL.revokeObjectURL(link.href); };
 els.scanButton.onclick = startScanner;
 els.closeScanner.onclick = async () => { await stopScanner(); els.scanDialog.close(); };
 els.scanDialog.addEventListener('cancel', async event => { event.preventDefault(); await stopScanner(); els.scanDialog.close(); });
@@ -210,3 +301,4 @@ els.photoInput.onchange = async event => {
 els.rules.value = DEFAULT_CATEGORY_RULES;
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
 loadData();
+setupBackend();

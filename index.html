@@ -17,7 +17,7 @@
           <p class="eyebrow">PRICE FINDER</p>
           <h1>เช็กราคาสินค้า</h1>
         </div>
-        <button class="icon-button" id="open-import" aria-label="อัปเดตข้อมูล">⚙</button>
+        <div class="header-actions"><button class="icon-button" id="admin-button" type="button" aria-label="ผู้ดูแลระบบ">🔐</button><button class="icon-button" id="open-import" aria-label="อัปเดตข้อมูล">⚙</button></div>
       </header>
 
       <section class="search-section">
@@ -70,11 +70,23 @@
       <p id="scanner-message" class="hint">กำลังเปิดกล้อง…</p>
     </dialog>
 
+    <dialog id="admin-dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">ผู้ดูแลร้าน</p><h2 id="admin-title">เข้าสู่ระบบเพื่อแก้ราคา</h2></div><button class="icon-button" id="close-admin" type="button" aria-label="ปิด">×</button></div>
+      <form id="admin-login-form" class="admin-form"><p>ล็อกอินด้วยบัญชีผู้ดูแลเท่านั้น พนักงานทั่วไปยังค้นหาราคาได้ตามปกติ</p><label>อีเมล<input id="admin-email" type="email" autocomplete="email" required></label><label>รหัสผ่าน<input id="admin-password" type="password" autocomplete="current-password" required></label><button class="primary-button" type="submit">เข้าสู่ระบบ</button></form>
+      <div id="admin-signed-in" hidden><p id="admin-user"></p><p class="hint">แตะราคาบนการ์ดสินค้าเพื่อแก้ไข ราคาใหม่จะซิงก์ไปทุกเครื่อง</p><button id="admin-logout" class="secondary-button" type="button">ออกจากระบบ</button></div><p id="admin-message" class="hint"></p>
+    </dialog>
+    <dialog id="price-editor-dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">แก้ไขราคา</p><h2 id="edit-product-name"></h2></div><button class="icon-button" id="close-price-editor" type="button" aria-label="ปิด">×</button></div>
+      <form id="price-editor-form" class="admin-form"><p id="edit-product-detail" class="hint"></p><label>หน่วย<select id="edit-unit"></select></label><label>ราคาขายใหม่<input id="edit-price" inputmode="decimal" type="number" min="0" step="0.01" required></label><label>หมายเหตุ <span class="optional">(ไม่บังคับ)</span><input id="edit-reason" maxlength="120" placeholder="เช่น โปรโมชันหน้าร้าน"></label><label>ใช้ถึงวันที่ <span class="optional">(ไม่บังคับ)</span><input id="edit-expires" type="date"></label><button class="primary-button" type="submit">บันทึกราคาใหม่</button><button id="reset-price" class="text-button reset-price" type="button">ลบราคาแก้ไข กลับไปใช้ราคา POS</button></form><p id="price-editor-message" class="hint"></p>
+    </dialog>
     <template id="product-template">
       <article class="product-card"><div class="product-main"><h3></h3><p class="product-meta"></p></div><div class="price-list"></div></article>
     </template>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode" defer></script>
-    <script src="app.js?v=12"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase-config.js?v=1"></script>
+    <script src="supabase-client.js?v=1"></script>
+    <script src="app.js?v=13"></script>
   </body>
 </html>
