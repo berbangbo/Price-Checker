@@ -5,7 +5,7 @@ const els = {
   dialog: document.querySelector('#import-dialog'), openImport: document.querySelector('#open-import'), file: document.querySelector('#file-input'),
   mappingPanel: document.querySelector('#mapping-panel'), mappingFields: document.querySelector('#mapping-fields'), importButton: document.querySelector('#import-data'),
   importMessage: document.querySelector('#import-message'), rules: document.querySelector('#category-rules'), exportButton: document.querySelector('#export-data'),
-  scanButton: document.querySelector('#scan-barcode'), scanDialog: document.querySelector('#scanner-dialog'), closeScanner: document.querySelector('#close-scanner'), scannerMessage: document.querySelector('#scanner-message'), torch: document.querySelector('#toggle-torch'),
+  scanButton: document.querySelector('#scan-barcode'), scanDialog: document.querySelector('#scanner-dialog'), closeScanner: document.querySelector('#close-scanner'), scannerMessage: document.querySelector('#scanner-message'), torch: document.querySelector('#toggle-torch'), capturePhoto: document.querySelector('#capture-photo'), photoInput: document.querySelector('#photo-input'),
 };
 const DEFAULT_CATEGORY_RULES = `โค้ก,เป๊ปซี่,น้ำดื่ม,น้ำอัดลม,ชา,กาแฟ,นม,โซดา,เบียร์,โออิชิ,อิชิตัน = เครื่องดื่ม
 เลย์,ขนม,มันฝรั่ง,คุกกี้,เยลลี่,ลูกอม,หมากฝรั่ง,เวเฟอร์,ช็อกโกแลต = ขนม
@@ -99,6 +99,14 @@ async function stopScanner() {
   torchOn = false;
   els.torch.hidden = true;
 }
+async function completeScan(decodedText) {
+  els.search.value = decodedText;
+  els.clear.hidden = false;
+  render();
+  els.scannerMessage.textContent = `พบรหัส ${decodedText}`;
+  await stopScanner();
+  els.scanDialog.close();
+}
 async function startScanner() {
   if (!window.Html5Qrcode || !navigator.mediaDevices?.getUserMedia) {
     els.scanDialog.showModal();
@@ -114,14 +122,7 @@ async function startScanner() {
     const cameraSource = rearCamera ? rearCamera.id : { facingMode: 'environment' };
     const formats = window.Html5QrcodeSupportedFormats;
     const retailFormats = formats ? [formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E, formats.CODE_128].filter(Boolean) : undefined;
-    await scanner.start(cameraSource, { fps: 18, qrbox: { width: 300, height: 145 }, disableFlip: true, formatsToSupport: retailFormats, experimentalFeatures: { useBarCodeDetectorIfSupported: true } }, async decodedText => {
-      els.search.value = decodedText;
-      els.clear.hidden = false;
-      render();
-      els.scannerMessage.textContent = `พบรหัส ${decodedText}`;
-      await stopScanner();
-      els.scanDialog.close();
-    });
+    await scanner.start(cameraSource, { fps: 18, qrbox: { width: 300, height: 145 }, disableFlip: true, formatsToSupport: retailFormats, experimentalFeatures: { useBarCodeDetectorIfSupported: true } }, completeScan);
     const video = document.querySelector('#barcode-reader video');
     if (video) { video.setAttribute('playsinline', 'true'); video.setAttribute('webkit-playsinline', 'true'); }
     const capabilities = scanner.getRunningTrackCapabilities?.() || {};
@@ -190,6 +191,21 @@ els.torch.onclick = async () => {
     await scanner.applyVideoConstraints({ advanced: [{ torch: torchOn }] });
     els.torch.textContent = torchOn ? '🔦 ปิดไฟฉาย' : '🔦 เปิดไฟฉาย';
   } catch { els.scannerMessage.textContent = 'เครื่องนี้เปิดไฟฉายผ่านเว็บไม่ได้'; }
+};
+els.capturePhoto.onclick = () => els.photoInput.click();
+els.photoInput.onchange = async event => {
+  const file = event.target.files[0];
+  if (!file || !window.Html5Qrcode) return;
+  els.scannerMessage.textContent = 'กำลังอ่านบาร์โค้ดจากภาพ…';
+  await stopScanner();
+  try {
+    scanner = new Html5Qrcode('barcode-reader');
+    const decodedText = await scanner.scanFile(file, true);
+    await completeScan(decodedText);
+  } catch {
+    els.scannerMessage.textContent = 'อ่านบาร์โค้ดจากภาพไม่สำเร็จ ลองถ่ายใกล้ขึ้นและให้บาร์โค้ดเต็มกรอบ';
+    await stopScanner();
+  } finally { event.target.value = ''; }
 };
 els.rules.value = DEFAULT_CATEGORY_RULES;
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
