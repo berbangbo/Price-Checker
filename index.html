@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#155e75">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <title>ราคาสินค้า</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <div>
+          <p class="eyebrow">PRICE FINDER</p>
+          <h1>เช็กราคาสินค้า</h1>
+        </div>
+        <button class="icon-button" id="open-import" aria-label="อัปเดตข้อมูล">⚙</button>
+      </header>
+
+      <section class="search-section">
+        <div class="search-row">
+          <label class="search-box" for="search-input">
+            <span>⌕</span>
+            <input id="search-input" type="search" placeholder="ค้นหาชื่อสินค้า, SKU หรือบาร์โค้ด" autocomplete="off">
+            <button id="clear-search" type="button" hidden>×</button>
+          </label>
+          <button class="scan-button" id="scan-barcode" type="button" aria-label="สแกนบาร์โค้ด">▣</button>
+        </div>
+        <p id="data-status" class="data-status">กำลังโหลดรายการสินค้า…</p>
+      </section>
+
+      <section>
+        <div class="section-title"><h2>เลือกหมวดหมู่</h2><button id="all-categories" class="text-button">ดูทั้งหมด</button></div>
+        <div id="category-list" class="category-list" aria-label="หมวดหมู่สินค้า"></div>
+      </section>
+
+      <section class="results-section" aria-live="polite">
+        <div class="section-title"><h2 id="results-heading">สินค้าในหมวดนี้</h2><span id="result-count"></span></div>
+        <div id="product-list" class="product-list"></div>
+      </section>
+    </main>
+
+    <dialog id="import-dialog">
+      <form method="dialog" id="import-form">
+        <div class="dialog-heading"><div><p class="eyebrow">สำหรับเจ้าของร้าน</p><h2>อัปเดตราคาจาก POS</h2></div><button class="icon-button" value="cancel" aria-label="ปิด">×</button></div>
+        <p>เลือกไฟล์ <strong>.xls</strong> หรือ <strong>.xlsx</strong> จาก POS โปรแกรมจะแปลงเฉพาะข้อมูลที่พนักงานต้องเห็นไว้ในเครื่องนี้</p>
+        <label class="file-picker">เลือกไฟล์ POS<input id="file-input" type="file" accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"></label>
+        <div id="mapping-panel" hidden>
+          <h3>จับคู่คอลัมน์</h3>
+          <p class="hint">ตรวจชื่อคอลัมน์ครั้งแรกก่อนนำเข้า ระบบจะจำรูปแบบนี้ไว้</p>
+          <div class="mapping-grid" id="mapping-fields"></div>
+          <label>กติกาสร้างหมวด (ไม่บังคับ)
+            <textarea id="category-rules" rows="5" placeholder="โค้ก,เป๊ปซี่ = เครื่องดื่ม&#10;เลย์,ขนม = ขนม&#10;มาม่า = อาหารแห้ง"></textarea>
+          </label>
+          <button id="import-data" type="button" class="primary-button">นำเข้าข้อมูล</button>
+        </div>
+        <p id="import-message" class="hint"></p>
+        <div class="dialog-actions"><button id="export-data" type="button" class="text-button">ดาวน์โหลดไฟล์ข้อมูลสำหรับ GitHub</button><button value="cancel" class="secondary-button">ปิด</button></div>
+      </form>
+    </dialog>
+
+    <dialog id="scanner-dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">สแกนบาร์โค้ด</p><h2>หันกล้องไปที่บาร์โค้ด</h2></div><button class="icon-button" id="close-scanner" type="button" aria-label="ปิด">×</button></div>
+      <div id="barcode-reader" class="barcode-reader"></div>
+      <p id="scanner-message" class="hint">กำลังเปิดกล้อง…</p>
+    </dialog>
+
+    <template id="product-template">
+      <article class="product-card"><div class="product-main"><h3></h3><p class="product-meta"></p></div><div class="price-list"></div></article>
+    </template>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" defer></script>
+    <script src="app.js?v=9"></script>
+  </body>
+</html>
