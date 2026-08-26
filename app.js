@@ -114,7 +114,7 @@ async function startScanner() {
     const cameraSource = rearCamera ? rearCamera.id : { facingMode: 'environment' };
     const formats = window.Html5QrcodeSupportedFormats;
     const retailFormats = formats ? [formats.EAN_13, formats.EAN_8, formats.UPC_A, formats.UPC_E, formats.CODE_128].filter(Boolean) : undefined;
-    await scanner.start(cameraSource, { fps: 15, qrbox: { width: 300, height: 145 }, disableFlip: true, formatsToSupport: retailFormats }, async decodedText => {
+    await scanner.start(cameraSource, { fps: 18, qrbox: { width: 300, height: 145 }, disableFlip: true, formatsToSupport: retailFormats, experimentalFeatures: { useBarCodeDetectorIfSupported: true } }, async decodedText => {
       els.search.value = decodedText;
       els.clear.hidden = false;
       render();
@@ -125,6 +125,9 @@ async function startScanner() {
     const video = document.querySelector('#barcode-reader video');
     if (video) { video.setAttribute('playsinline', 'true'); video.setAttribute('webkit-playsinline', 'true'); }
     const capabilities = scanner.getRunningTrackCapabilities?.() || {};
+    if (capabilities.focusMode?.includes?.('continuous')) {
+      try { await scanner.applyVideoConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch { /* Browser chose its own focus mode. */ }
+    }
     els.torch.hidden = !capabilities.torch;
     els.scannerMessage.textContent = 'วางเส้นบาร์โค้ดไว้ในกรอบ ระบบจะค้นหาให้อัตโนมัติ';
   } catch (error) {
